@@ -2,16 +2,7 @@
 
 ## Project Summary
 
-In this project you will build and explain a small music recommender system.
-
-Your goal is to:
-
-- Represent songs and a user "taste profile" as data
-- Design a scoring rule that turns that data into recommendations
-- Evaluate what your system gets right and wrong
-- Reflect on how this mirrors real world AI recommenders
-
-Replace this paragraph with your own summary of what your version does.
+**VibeCheck 1.0** is a small content-based music recommender written in Python. It loads a 20-song catalog from a CSV, scores every song against a user's taste profile (favorite genre, favorite mood, target energy, and optional acoustic preference), and prints the top 5 songs along with the exact reasons each one scored the way it did. It also supports switchable scoring modes (genre-first, mood-first, energy-focused), an optional diversity penalty so one artist can't take over the list, and an ASCII table view. The main point of the project was less about building a "good" recommender and more about seeing how simple weights and a lopsided dataset create bias.
 
 ---
 
@@ -91,6 +82,7 @@ flowchart LR
    python -m venv .venv
    source .venv/bin/activate      # Mac or Linux
    .venv\Scripts\activate         # Windows
+   ```
 
 2. Install dependencies
 
@@ -101,7 +93,10 @@ pip install -r requirements.txt
 3. Run the app:
 
 ```bash
-python -m src.main
+python -m src.main                          # all 7 test profiles, balanced weights
+python -m src.main --profile "Chill Lofi"   # just one profile
+python -m src.main --mode energy_focused    # other modes: genre_first, mood_first
+python -m src.main --diverse --table        # diversity penalty + ASCII table
 ```
 
 ### Running Tests
@@ -112,19 +107,19 @@ Run the starter tests with:
 pytest
 ```
 
-You can add more tests in `tests/test_recommender.py`.
+There are 7 tests in `tests/test_recommender.py` covering the `Recommender` class, CSV loading, scoring, ranking order, and the diversity penalty.
 
 ---
 
 ## Sample Recommendation Output
 
-Output of `python -m src.main` with the default "pop / happy / energy 0.8" profile:
+Output of `python -m src.main --profile "Default Pop/Happy"` (the default "pop / happy / energy 0.8" profile):
 
 ```
 Loaded songs: 20
 
 ================================================================
-Profile: Default Pop/Happy
+Profile: Default Pop/Happy   (mode: balanced)
 Prefs:   {'genre': 'pop', 'mood': 'happy', 'energy': 0.8}
 ================================================================
 1. Sunrise City by Neon Echo  [pop / happy]
@@ -151,42 +146,66 @@ Prefs:   {'genre': 'pop', 'mood': 'happy', 'energy': 0.8}
 
 These match what I'd expect. "Sunrise City" is the only song that hits pop, happy, *and* the right energy, so it wins by a lot. "Gym Hero" and "Heartbreak Neon" make the top 3 just from the genre bonus, even though their moods (intense and sad) are wrong. "Rooftop Lights" is honestly a better fit vibe-wise than "Heartbreak Neon" for a happy pop fan, but it's labeled "indie pop," so it misses the +2.0. That's the genre bias I predicted showing up immediately.
 
+Same profile with `--diverse --table` (diversity penalty + table view). Heartbreak Neon drops from #3 to #4 because Neon Echo and pop are both already in the list:
+
+```
+Loaded songs: 20
+
+Profile: Default Pop/Happy   (mode: balanced + diversity)
+Prefs:   {'genre': 'pop', 'mood': 'happy', 'energy': 0.8}
++-----+------------------------+------------------+------------------------+--------+------------------------------------------------+
+| #   | Title                  | Artist           | Genre / Mood           | Score  | Reasons                                        |
++=====+========================+==================+========================+========+================================================+
+| 1   | Sunrise City           | Neon Echo        | pop / happy            | 4.47   | genre match (+2.0)                             |
+|     |                        |                  |                        |        | mood match (+1.0)                              |
+|     |                        |                  |                        |        | energy 0.82 vs target 0.80 (+1.47)             |
++-----+------------------------+------------------+------------------------+--------+------------------------------------------------+
+| 2   | Gym Hero               | Max Pulse        | pop / intense          | 2.81   | genre match (+2.0)                             |
+|     |                        |                  |                        |        | energy 0.93 vs target 0.80 (+1.30)             |
+|     |                        |                  |                        |        | diversity: genre already listed (-0.5)         |
++-----+------------------------+------------------+------------------------+--------+------------------------------------------------+
+| 3   | Rooftop Lights         | Indigo Parade    | indie pop / happy      | 2.44   | mood match (+1.0)                              |
+|     |                        |                  |                        |        | energy 0.76 vs target 0.80 (+1.44)             |
++-----+------------------------+------------------+------------------------+--------+------------------------------------------------+
+| 4   | Heartbreak Neon        | Neon Echo        | pop / sad              | 1.70   | genre match (+2.0)                             |
+|     |                        |                  |                        |        | energy 0.60 vs target 0.80 (+1.20)             |
+|     |                        |                  |                        |        | diversity: artist already listed (-1.0)        |
+|     |                        |                  |                        |        | diversity: genre already listed (-0.5)         |
++-----+------------------------+------------------+------------------------+--------+------------------------------------------------+
+| 5   | Concrete Crown         | Lyric Vault      | hip hop / confident    | 1.47   | energy 0.78 vs target 0.80 (+1.47)             |
++-----+------------------------+------------------+------------------------+--------+------------------------------------------------+
+```
+
+Full output for all 7 profiles (plus the weight experiment) is in the Evaluation section of [model_card.md](model_card.md).
+
 ---
 
 ## Experiments You Tried
 
-Use this section to document the experiments you ran. For example:
-
-- What happened when you changed the weight on genre from 2.0 to 0.5
-- What happened when you added tempo or valence to the score
-- How did your system behave for different types of users
+- **Weight shift (energy x2, genre x0.5).** I added an `energy_focused` mode (genre 1.0, mood 1.0, energy 3.0). For the happy pop user, "Rooftop Lights" jumped from #4 to #2, passing two pop songs with the wrong mood. I think that's more accurate, since it's actually a happy, upbeat song. The downside is that high-energy songs like "Gym Hero" and "Pulse Reactor" got even stickier for anyone who wants energetic music.
+- **Adversarial profiles.** I tested a "Sad but Hyped" user (folk, sad, energy 0.9), a "Ghost Genre" user (k-pop, which isn't in the catalog), and an "Acoustic Headbanger" (metal, angry, likes acoustic). The sad one got a slow folk song at #1 because labels outweighed the energy mismatch. The k-pop one fell back to reasonable happy songs. The acoustic preference was basically ignored for the headbanger because there are no loud acoustic songs.
+- **Diversity penalty.** With `--diverse`, a repeat artist loses 1.0 and a repeat genre loses 0.5. For Chill Lofi, the second LoRoom song dropped from #3 to #4, letting an ambient track in. It's a soft penalty, so repeat artists can still show up if they're a strong enough match.
+- **Different user types.** Users at the extremes (chill lofi, intense rock) got very clean lists. Users whose genre only has one song got one good match and then a list sorted mostly by energy.
 
 ---
 
 ## Limitations and Risks
 
-Summarize some limitations of your recommender.
+- **Tiny catalog.** 20 songs, and most genres only have 1, so niche users run out of matches immediately.
+- **Genre dominates.** A +2.0 genre bonus means a wrong-mood pop song usually beats a perfect-mood song from another genre.
+- **Exact string matching.** "indie pop" gets zero credit for a "pop" fan.
+- **Catalog imbalance = filter bubble.** Pop and lofi have 3 songs each, so those users get more varied, higher-scoring lists than everyone else.
+- **No context or history.** It doesn't know lyrics, language, time of day, what you skipped, or what you've already heard.
+- **"Gym Hero" problem.** One high-energy pop song shows up in the top 5 for 5 out of 7 profiles, because energy closeness gives points to everyone and the catalog is small.
 
-Examples:
-
-- It only works on a tiny catalog
-- It does not understand lyrics or language
-- It might over favor one genre or mood
-
-You will go deeper on this in your model card.
+More detail is in the [model card](model_card.md).
 
 ---
 
 ## Reflection
 
-Read and complete `model_card.md`:
+Read the full write-up in the [**Model Card**](model_card.md).
 
-[**Model Card**](model_card.md)
+The biggest thing I learned is that a recommender is really just two steps: a scoring rule that judges one song at a time, and a ranking rule that sorts all the scores. Everything that makes it feel "smart" comes from which features you score and how much each one is worth. My version is literally a weighted sum, and the Chill Lofi results still looked like a playlist I'd actually listen to. That was kind of eye-opening, because it means a recommendation can feel personal without the system understanding music at all.
 
-Write 1 to 2 paragraphs here about what you learned:
-
-- about how recommenders turn data into predictions
-- about where bias or unfairness could show up in systems like this
-
-
-
+The flip side is that bias shows up really easily, and it doesn't look like bias from the inside. I picked +2.0 for genre because it felt reasonable, but combined with a catalog where pop has 3 songs and metal has 1, pop fans end up with better lists than metal fans, and a sad pop song beats a happy indie pop song for a happy pop user. Nobody "decided" to favor pop, it just fell out of the weights and the data. At Spotify's scale, with millions of songs and real money attached to exposure, that same kind of quiet imbalance could decide which artists get heard, which is why things like model cards and diversity penalties actually matter.
