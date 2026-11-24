@@ -125,11 +125,42 @@ def score_song(user_prefs: Dict, song: Dict, mode: str = DEFAULT_MODE) -> Tuple[
     return round(score, 4), reasons
 
 
+ARTIST_REPEAT_PENALTY = 1.0
+GENRE_REPEAT_PENALTY = 0.5
+
+
 def recommend_songs(user_prefs: Dict, songs: List[Dict], k: int = 5,
-                    mode: str = DEFAULT_MODE) -> List[Tuple[Dict, float, str]]:
+                    mode: str = DEFAULT_MODE, diversity: bool = False) -> List[Tuple[Dict, float, str]]:
     """Score every song, sort high to low, and return the top k as (song, score, explanation)."""
     scored = []
     for song in songs:
         score, reasons = score_song(user_prefs, song, mode)
-        scored.append((song, score, ", ".join(reasons)))
-    return sorted(scored, key=lambda item: item[1], reverse=True)[:k]
+        scored.append((song, score, reasons))
+    scored = sorted(scored, key=lambda item: item[1], reverse=True)
+
+    if not diversity:
+        return [(song, score, ", ".join(reasons)) for song, score, reasons in scored[:k]]
+    return _diverse_top_k(scored, k)
+
+
+def _diverse_top_k(scored: List[Tuple[Dict, float, List[str]]], k: int) -> List[Tuple[Dict, float, str]]:
+    """Greedily build the top k, penalizing songs whose artist or genre is already picked."""
+    picked: List[Tuple[Dict, float, str]] = []
+    remaining = list(scored)
+    while remaining and len(picked) < k:
+        artists = {song["artist"] for song, _, _ in picked}
+        genres = {song["genre"] for song, _, _ in picked}
+        best = None
+        for song, score, reasons in remaining:
+            adjusted, extra = score, []
+            if song["artist"] in artists:
+                adjusted -= ARTIST_REPEAT_PENALTY
+                extra.append(f"diversity: artist already listed (-{ARTIST_REPEAT_PENALTY:.1f})")
+            if song["genre"] in genres:
+                adjusted -= GENRE_REPEAT_PENALTY
+                extra.append(f"diversity: genre already listed (-{GENRE_REPEAT_PENALTY:.1f})")
+            if best is None or adjusted > best[1]:
+                best = (song, round(adjusted, 4), reasons + extra, (song, score, reasons))
+        remaining.remove(best[3])
+        picked.append((best[0], best[1], ", ".join(best[2])))
+    return picked

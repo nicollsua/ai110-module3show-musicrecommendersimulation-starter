@@ -59,3 +59,51 @@ def test_explain_recommendation_returns_non_empty_string():
     explanation = rec.explain_recommendation(user, song)
     assert isinstance(explanation, str)
     assert explanation.strip() != ""
+
+
+# ---- Tests for the functional (dict-based) API ----
+from src.recommender import load_songs, score_song, recommend_songs
+
+
+def test_load_songs_converts_numeric_fields():
+    songs = load_songs("data/songs.csv")
+    assert len(songs) == 20
+    assert isinstance(songs[0]["id"], int)
+    assert isinstance(songs[0]["energy"], float)
+    assert isinstance(songs[0]["tempo_bpm"], float)
+
+
+def test_score_song_returns_score_and_reasons():
+    song = {"genre": "pop", "mood": "happy", "energy": 0.8, "acousticness": 0.2}
+    score, reasons = score_song({"genre": "pop", "mood": "happy", "energy": 0.8}, song)
+    assert score == 4.5  # 2.0 genre + 1.0 mood + 1.5 perfect energy
+    assert "genre match (+2.0)" in reasons
+    assert "mood match (+1.0)" in reasons
+
+
+def test_energy_rewards_closeness_not_magnitude():
+    prefs = {"energy": 0.4}
+    close, _ = score_song(prefs, {"genre": "x", "mood": "y", "energy": 0.45, "acousticness": 0.5})
+    far, _ = score_song(prefs, {"genre": "x", "mood": "y", "energy": 0.95, "acousticness": 0.5})
+    assert close > far
+
+
+def test_recommend_songs_sorted_high_to_low():
+    songs = load_songs("data/songs.csv")
+    recs = recommend_songs({"genre": "lofi", "mood": "chill", "energy": 0.35}, songs, k=5)
+    scores = [score for _, score, _ in recs]
+    assert scores == sorted(scores, reverse=True)
+    assert recs[0][0]["genre"] == "lofi"
+
+
+def test_diversity_penalty_pushes_down_repeat_artists():
+    songs = load_songs("data/songs.csv")
+    prefs = {"genre": "lofi", "mood": "chill", "energy": 0.35, "likes_acoustic": True}
+    plain = [s["title"] for s, _, _ in recommend_songs(prefs, songs, k=5)]
+    diverse = recommend_songs(prefs, songs, k=5, diversity=True)
+    diverse_titles = [s["title"] for s, _, _ in diverse]
+    # Focus Flow is a second LoRoom song, so it should drop below the ambient track
+    assert plain.index("Focus Flow") < plain.index("Spacewalk Thoughts")
+    assert diverse_titles.index("Focus Flow") > diverse_titles.index("Spacewalk Thoughts")
+    focus = next(expl for s, _, expl in diverse if s["title"] == "Focus Flow")
+    assert "artist already listed" in focus
