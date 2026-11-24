@@ -2,11 +2,16 @@ import csv
 from typing import List, Dict, Tuple
 from dataclasses import dataclass, asdict
 
-# Algorithm Recipe weights (see README "How The System Works")
-GENRE_WEIGHT = 2.0
-MOOD_WEIGHT = 1.0
-ENERGY_WEIGHT = 1.5
-ACOUSTIC_WEIGHT = 0.5
+# Scoring modes (Strategy pattern): each mode is just a different set of weights
+# that the same score_song "judge" uses. "balanced" is the original Algorithm Recipe.
+SCORING_MODES: Dict[str, Dict[str, float]] = {
+    "balanced":       {"genre": 2.0, "mood": 1.0, "energy": 1.5, "acoustic": 0.5},
+    "genre_first":    {"genre": 3.0, "mood": 0.5, "energy": 1.0, "acoustic": 0.5},
+    "mood_first":     {"genre": 1.0, "mood": 2.5, "energy": 1.5, "acoustic": 0.5},
+    # Phase 4 experiment: energy doubled (1.5 -> 3.0), genre halved (2.0 -> 1.0)
+    "energy_focused": {"genre": 1.0, "mood": 1.0, "energy": 3.0, "acoustic": 0.5},
+}
+DEFAULT_MODE = "balanced"
 
 NUMERIC_INT_FIELDS = {"id"}
 NUMERIC_FLOAT_FIELDS = {"energy", "tempo_bpm", "valence", "danceability", "acousticness"}
@@ -86,32 +91,33 @@ def load_songs(csv_path: str) -> List[Dict]:
     return songs
 
 
-def score_song(user_prefs: Dict, song: Dict) -> Tuple[float, List[str]]:
+def score_song(user_prefs: Dict, song: Dict, mode: str = DEFAULT_MODE) -> Tuple[float, List[str]]:
     """Score one song against user prefs and return (score, list of reasons)."""
+    w = SCORING_MODES[mode]
     score = 0.0
     reasons = []
 
     genre = user_prefs.get("genre")
     if genre and song["genre"].lower() == genre.lower():
-        score += GENRE_WEIGHT
-        reasons.append(f"genre match (+{GENRE_WEIGHT:.1f})")
+        score += w["genre"]
+        reasons.append(f"genre match (+{w['genre']:.1f})")
 
     mood = user_prefs.get("mood")
     if mood and song["mood"].lower() == mood.lower():
-        score += MOOD_WEIGHT
-        reasons.append(f"mood match (+{MOOD_WEIGHT:.1f})")
+        score += w["mood"]
+        reasons.append(f"mood match (+{w['mood']:.1f})")
 
     target_energy = user_prefs.get("energy")
     if target_energy is not None:
         gap = abs(song["energy"] - target_energy)
-        points = ENERGY_WEIGHT * (1 - gap)
+        points = w["energy"] * (1 - gap)
         score += points
         reasons.append(f"energy {song['energy']:.2f} vs target {target_energy:.2f} (+{points:.2f})")
 
     likes_acoustic = user_prefs.get("likes_acoustic")
     if likes_acoustic is not None:
         fit = song["acousticness"] if likes_acoustic else 1 - song["acousticness"]
-        points = ACOUSTIC_WEIGHT * fit
+        points = w["acoustic"] * fit
         score += points
         label = "acoustic" if likes_acoustic else "non-acoustic"
         reasons.append(f"{label} fit (+{points:.2f})")
@@ -119,10 +125,11 @@ def score_song(user_prefs: Dict, song: Dict) -> Tuple[float, List[str]]:
     return round(score, 4), reasons
 
 
-def recommend_songs(user_prefs: Dict, songs: List[Dict], k: int = 5) -> List[Tuple[Dict, float, str]]:
+def recommend_songs(user_prefs: Dict, songs: List[Dict], k: int = 5,
+                    mode: str = DEFAULT_MODE) -> List[Tuple[Dict, float, str]]:
     """Score every song, sort high to low, and return the top k as (song, score, explanation)."""
     scored = []
     for song in songs:
-        score, reasons = score_song(user_prefs, song)
+        score, reasons = score_song(user_prefs, song, mode)
         scored.append((song, score, ", ".join(reasons)))
     return sorted(scored, key=lambda item: item[1], reverse=True)[:k]
