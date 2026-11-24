@@ -118,18 +118,38 @@ You can add more tests in `tests/test_recommender.py`.
 
 ## Sample Recommendation Output
 
-Paste a sample of your recommender's output here as a text block so a reader can see what it produces:
+Output of `python -m src.main` with the default "pop / happy / energy 0.8" profile:
 
 ```
-# e.g.:
-# User profile: genre=indie, mood=chill, energy=low
-# Recommendations:
-#   1. ...
-#   2. ...
-#   3. ...
+Loaded songs: 20
+
+================================================================
+Profile: Default Pop/Happy
+Prefs:   {'genre': 'pop', 'mood': 'happy', 'energy': 0.8}
+================================================================
+1. Sunrise City by Neon Echo  [pop / happy]
+   Score: 4.47
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy 0.82 vs target 0.80 (+1.47)
+2. Gym Hero by Max Pulse  [pop / intense]
+   Score: 3.31
+     - genre match (+2.0)
+     - energy 0.93 vs target 0.80 (+1.30)
+3. Heartbreak Neon by Neon Echo  [pop / sad]
+   Score: 3.20
+     - genre match (+2.0)
+     - energy 0.60 vs target 0.80 (+1.20)
+4. Rooftop Lights by Indigo Parade  [indie pop / happy]
+   Score: 2.44
+     - mood match (+1.0)
+     - energy 0.76 vs target 0.80 (+1.44)
+5. Concrete Crown by Lyric Vault  [hip hop / confident]
+   Score: 1.47
+     - energy 0.78 vs target 0.80 (+1.47)
 ```
 
-**Screenshot or video** *(optional)*: <!-- Insert a screenshot or demo video link here -->
+These match what I'd expect. "Sunrise City" is the only song that hits pop, happy, *and* the right energy, so it wins by a lot. "Gym Hero" and "Heartbreak Neon" make the top 3 just from the genre bonus, even though their moods (intense and sad) are wrong. "Rooftop Lights" is honestly a better fit vibe-wise than "Heartbreak Neon" for a happy pop fan, but it's labeled "indie pop," so it misses the +2.0. That's the genre bias I predicted showing up immediately.
 
 ---
 
