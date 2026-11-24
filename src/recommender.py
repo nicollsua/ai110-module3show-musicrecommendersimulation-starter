@@ -13,8 +13,18 @@ SCORING_MODES: Dict[str, Dict[str, float]] = {
 }
 DEFAULT_MODE = "balanced"
 
-NUMERIC_INT_FIELDS = {"id"}
-NUMERIC_FLOAT_FIELDS = {"energy", "tempo_bpm", "valence", "danceability", "acousticness"}
+NUMERIC_INT_FIELDS = {"id", "popularity", "release_decade"}
+NUMERIC_FLOAT_FIELDS = {"energy", "tempo_bpm", "valence", "danceability", "acousticness",
+                        "instrumentalness", "liveness"}
+
+# Advanced-feature weights (Challenge 1). These only kick in when the user's
+# profile actually sets the matching key, so the original profiles score the same.
+POPULARITY_WEIGHT = 0.5      # closeness to target_popularity (0-100)
+DECADE_WEIGHT = 0.5          # exact decade match; half credit if one decade off
+TAG_WEIGHT = 0.3             # per overlapping detailed mood tag
+TAG_CAP = 0.9                # max points from mood tags
+INSTRUMENTAL_WEIGHT = 0.5    # fit to wants_instrumental
+LIVE_WEIGHT = 0.3            # fit to likes_live
 
 
 @dataclass
@@ -33,6 +43,11 @@ class Song:
     valence: float
     danceability: float
     acousticness: float
+    popularity: int = 50
+    release_decade: int = 2020
+    mood_tags: str = ""
+    instrumentalness: float = 0.0
+    liveness: float = 0.0
 
 
 @dataclass
@@ -122,7 +137,60 @@ def score_song(user_prefs: Dict, song: Dict, mode: str = DEFAULT_MODE) -> Tuple[
         label = "acoustic" if likes_acoustic else "non-acoustic"
         reasons.append(f"{label} fit (+{points:.2f})")
 
+    extra_score, extra_reasons = _score_advanced_features(user_prefs, song)
+    score += extra_score
+    reasons.extend(extra_reasons)
+
     return round(score, 4), reasons
+
+
+def _score_advanced_features(user_prefs: Dict, song: Dict) -> Tuple[float, List[str]]:
+    """Score popularity, decade, mood tags, instrumentalness, and liveness if the user set them."""
+    score = 0.0
+    reasons = []
+
+    target_pop = user_prefs.get("target_popularity")
+    if target_pop is not None and "popularity" in song:
+        points = POPULARITY_WEIGHT * (1 - abs(song["popularity"] - target_pop) / 100)
+        score += points
+        reasons.append(f"popularity {song['popularity']} vs target {target_pop} (+{points:.2f})")
+
+    decade = user_prefs.get("favorite_decade")
+    if decade is not None and "release_decade" in song:
+        gap = abs(song["release_decade"] - decade)
+        if gap == 0:
+            score += DECADE_WEIGHT
+            reasons.append(f"{decade}s match (+{DECADE_WEIGHT:.2f})")
+        elif gap == 10:
+            score += DECADE_WEIGHT / 2
+            reasons.append(f"close decade {song['release_decade']}s (+{DECADE_WEIGHT / 2:.2f})")
+
+    wanted_tags = {t.lower() for t in user_prefs.get("mood_tags", [])}
+    if wanted_tags and song.get("mood_tags"):
+        song_tags = {t.strip().lower() for t in song["mood_tags"].split(";") if t.strip()}
+        overlap = sorted(wanted_tags & song_tags)
+        if overlap:
+            points = min(TAG_WEIGHT * len(overlap), TAG_CAP)
+            score += points
+            reasons.append(f"mood tags {'/'.join(overlap)} (+{points:.2f})")
+
+    wants_instrumental = user_prefs.get("wants_instrumental")
+    if wants_instrumental is not None and "instrumentalness" in song:
+        fit = song["instrumentalness"] if wants_instrumental else 1 - song["instrumentalness"]
+        points = INSTRUMENTAL_WEIGHT * fit
+        score += points
+        label = "instrumental" if wants_instrumental else "vocal"
+        reasons.append(f"{label} fit (+{points:.2f})")
+
+    likes_live = user_prefs.get("likes_live")
+    if likes_live is not None and "liveness" in song:
+        fit = song["liveness"] if likes_live else 1 - song["liveness"]
+        points = LIVE_WEIGHT * fit
+        score += points
+        label = "live feel" if likes_live else "studio feel"
+        reasons.append(f"{label} fit (+{points:.2f})")
+
+    return score, reasons
 
 
 ARTIST_REPEAT_PENALTY = 1.0

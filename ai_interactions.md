@@ -1,6 +1,6 @@
 # AI Interactions Log
 
-> Stretch features attempted: **Challenge 2 (Multiple Scoring Modes)**, **Challenge 3 (Diversity Penalty)**, and **Challenge 4 (Visual Summary Table)**. I also used an agentic workflow for most of the implementation, so that section is filled in too.
+> Stretch features attempted: **Challenge 1 (Advanced Song Features)**, **Challenge 2 (Multiple Scoring Modes)**, **Challenge 3 (Diversity Penalty)**, and **Challenge 4 (Visual Summary Table)**. I also used an agentic workflow for most of the implementation, so that section is filled in too.
 
 ---
 
@@ -19,6 +19,7 @@ I used Claude Code in agent mode inside VS Code and gave it the full project ins
 - "Apply this experiment: double the energy weight and halve the genre weight. Verify the math still makes sense (max score, no negative components)."
 - "Brainstorm a simple design pattern so I can switch between ranking strategies like genre-first, mood-first, and energy-focused without copy-pasting the scoring function."
 - "Add a diversity penalty: if a song's artist is already in the top recommendations, subtract points. Same for genre but smaller."
+- "Add 5 new attributes to songs.csv that aren't in the baseline: popularity (0-100), release decade, detailed mood tags (like nostalgic, aggressive, euphoric), instrumentalness, and liveness. Fill in realistic values for all 20 songs. Then update score_song so it uses them, but only when the user profile sets the matching preference, so my existing profiles and documented outputs don't change."
 - "Format the output as an ASCII table that still includes the reasons for each score. Don't add a new library."
 
 **What did the agent generate or change?**
@@ -26,12 +27,17 @@ I used Claude Code in agent mode inside VS Code and gave it the full project ins
 - `data/songs.csv`: added 10 songs covering genres/moods that weren't in the starter (hip hop, country, metal, classical, r&b, edm, folk, reggae, blues, and a sad pop song).
 - `src/recommender.py`: `load_songs`, `score_song`, `recommend_songs`, the `Recommender` class methods, the `SCORING_MODES` dictionary, and the `_diverse_top_k` helper. Added 1-line docstrings to every function.
 - `src/main.py`: 7 test profiles, a readable printout with reasons, `--mode`, `--profile`, `--diverse`, `--table`, and `-k` CLI flags.
-- `tests/test_recommender.py`: 5 new tests on top of the 2 starter tests.
+- `data/songs.csv` (Challenge 1): 5 new columns: `popularity`, `release_decade`, `mood_tags` (semicolon-separated), `instrumentalness`, `liveness`.
+- `src/recommender.py` (Challenge 1): a `_score_advanced_features` helper, called at the end of `score_song`. `load_songs` converts the new numeric columns, and the `Song` dataclass got the new fields with defaults so the starter tests still work.
+- `src/main.py` (Challenge 1): two new profiles, "90s Nostalgia Hunter" and "Deep Focus Instrumental."
+- `tests/test_recommender.py`: 6 new tests on top of the 2 starter tests.
 - Ran `python -m src.main` and `pytest` after each change, and committed/pushed after each phase.
 
 **What did you verify or fix manually?**
 
 - **The diversity test was wrong at first.** The first version of the test asserted that the top 5 would have *no* repeat artists. That failed, because the penalty is soft (−1.0), and Focus Flow (a second LoRoom song) still scores high enough to stay in the top 5 for Chill Lofi. That's actually the behavior I want, so I rewrote the test to check that the repeat artist moves *down* (from #3 to #4, below Spacewalk Thoughts) and that the reason string mentions the penalty.
+- **Challenge 1 didn't break anything.** I diffed the full output of the original 7 profiles before and after adding the new features, and it was identical. That confirmed the new rules really only apply when a profile opts in. I also hand-checked Dusty Porch Swing for the nostalgia profile: 2.0 + 1.0 + 1.47 + 0.46 + 0.5 + 0.9 + 0.09 = 6.42, which matches the terminal.
+- **Starter tests vs new Song fields.** The starter tests build `Song(...)` objects with only the original 10 fields, so adding required fields would have broken them. I gave the new fields default values instead.
 - **Import path.** The starter `main.py` used `from recommender import ...`, which breaks when you run `python -m src.main` from the project root. I made it try `src.recommender` first and fall back.
 - **Math check on the experiment.** I hand-checked that in `energy_focused` mode the max score is 1.0 + 1.0 + 3.0 + 0.5 = 5.5, and that energy points can't go negative since energy values are all between 0 and 1 (so the gap is at most 1).
 - **Hand-checked a few scores.** For example, Sunrise City for the pop/happy/0.8 user: 2.0 + 1.0 + 1.5 × (1 − 0.02) = 4.47, which matches the terminal output.

@@ -21,12 +21,14 @@ My version is a lot smaller. It's purely **content-based**, since I only have on
 - `energy` (0.0 to 1.0)
 - `acousticness` (0.0 to 1.0)
 - also stored but not scored: `tempo_bpm`, `valence`, `danceability`, `title`, `artist`, `id`
+- **advanced features (Challenge 1):** `popularity` (0-100), `release_decade`, `mood_tags` (detailed tags like "nostalgic;warm;bittersweet"), `instrumentalness` (0-1), `liveness` (0-1)
 
 **`UserProfile`** (the taste profile):
 - `favorite_genre` / `genre`
 - `favorite_mood` / `mood`
 - `target_energy` / `energy` (a number from 0 to 1, not "high" or "low")
 - `likes_acoustic` (True/False, optional)
+- optional advanced prefs: `target_popularity`, `favorite_decade`, `mood_tags` (list), `wants_instrumental`, `likes_live`
 
 Example profile I designed around:
 
@@ -47,7 +49,17 @@ Each song gets judged on its own against the user's profile:
 | Energy closeness | **+1.5 × (1 − \|song.energy − target_energy\|)** |
 | Acoustic preference (if the user set it) | **+0.5 × acousticness** if they like acoustic, otherwise **+0.5 × (1 − acousticness)** |
 
-So a perfect song maxes out at **5.0**. The energy part is the important design choice: it rewards songs that are *close* to the target instead of just rewarding "more energy." A song at 0.80 energy for a 0.80 user gets the full 1.5, while a song at 0.30 only gets 0.75. Genre is worth double mood because, in my experience, genre is the bigger dealbreaker (a sad country song and a sad metal song are not interchangeable), but mood still matters enough to break ties.
+**Advanced features (only scored if the user sets them):**
+
+| Rule | Points |
+|---|---|
+| Popularity closeness | **+0.5 × (1 − gap/100)** |
+| Release decade | **+0.5** exact match, **+0.25** if one decade off |
+| Detailed mood tags | **+0.3 per overlapping tag**, capped at +0.9 |
+| Instrumental preference | **+0.5 × instrumentalness** (or 1 − it) |
+| Live preference | **+0.3 × liveness** (or 1 − it) |
+
+So with just the core prefs a perfect song maxes out at **5.0** (7.7 if every advanced pref is set). The energy part is the important design choice: it rewards songs that are *close* to the target instead of just rewarding "more energy." A song at 0.80 energy for a 0.80 user gets the full 1.5, while a song at 0.30 only gets 0.75. Genre is worth double mood because, in my experience, genre is the bigger dealbreaker (a sad country song and a sad metal song are not interchangeable), but mood still matters enough to break ties.
 
 ### Ranking rule
 
@@ -93,7 +105,7 @@ pip install -r requirements.txt
 3. Run the app:
 
 ```bash
-python -m src.main                          # all 7 test profiles, balanced weights
+python -m src.main                          # all 9 test profiles, balanced weights
 python -m src.main --profile "Chill Lofi"   # just one profile
 python -m src.main --mode energy_focused    # other modes: genre_first, mood_first
 python -m src.main --diverse --table        # diversity penalty + ASCII table
@@ -185,6 +197,7 @@ Full output for all 7 profiles (plus the weight experiment) is in the Evaluation
 - **Weight shift (energy x2, genre x0.5).** I added an `energy_focused` mode (genre 1.0, mood 1.0, energy 3.0). For the happy pop user, "Rooftop Lights" jumped from #4 to #2, passing two pop songs with the wrong mood. I think that's more accurate, since it's actually a happy, upbeat song. The downside is that high-energy songs like "Gym Hero" and "Pulse Reactor" got even stickier for anyone who wants energetic music.
 - **Adversarial profiles.** I tested a "Sad but Hyped" user (folk, sad, energy 0.9), a "Ghost Genre" user (k-pop, which isn't in the catalog), and an "Acoustic Headbanger" (metal, angry, likes acoustic). The sad one got a slow folk song at #1 because labels outweighed the energy mismatch. The k-pop one fell back to reasonable happy songs. The acoustic preference was basically ignored for the headbanger because there are no loud acoustic songs.
 - **Diversity penalty.** With `--diverse`, a repeat artist loses 1.0 and a repeat genre loses 0.5. For Chill Lofi, the second LoRoom song dropped from #3 to #4, letting an ambient track in. It's a soft penalty, so repeat artists can still show up if they're a strong enough match.
+- **Advanced features (Challenge 1).** I added 5 new columns (popularity, release decade, detailed mood tags, instrumentalness, liveness) and two profiles that use them. The tags turned out to be the most interesting part: they gave cross-genre songs a way in. For the "Deep Focus Instrumental" user, a classical piece ("Moonlit Sonata No. 2") made the top 5 because it's calm, instrumental, and matches the popularity target exactly, even with no genre or mood match. For the "90s Nostalgia Hunter," a 90s jazz song tagged "warm; nostalgic" jumped to #2. The original 7 profiles produce exactly the same output as before, since the new rules only apply when a profile asks for them.
 - **Different user types.** Users at the extremes (chill lofi, intense rock) got very clean lists. Users whose genre only has one song got one good match and then a list sorted mostly by energy.
 
 ---

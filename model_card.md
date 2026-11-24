@@ -31,6 +31,7 @@ After every song has a score, the songs are sorted from highest to lowest and th
 
 **Changes from the starter:** The starter code had empty functions, so I built the scoring from scratch. On top of the base recipe I added:
 - **Scoring modes** (`balanced`, `genre_first`, `mood_first`, `energy_focused`), which are just different weight settings for the same judge.
+- **Five advanced features** (popularity, release decade, detailed mood tags, instrumentalness, liveness). These only count if your profile mentions them. For example, if you say you love the 90s, a 90s song gets +0.5 and a 2000s song gets +0.25. Each detailed mood tag you share with a song (like "warm" or "bittersweet") is worth +0.3, up to +0.9.
 - An optional **diversity penalty**: once an artist is in the list, their other songs lose 1 point, and once a genre is in the list, other songs from that genre lose 0.5. This keeps the top 5 from being three songs by the same person.
 
 ---
@@ -41,6 +42,7 @@ After every song has a score, the songs are sorted from highest to lowest and th
 - **Genres (15):** pop (3), lofi (3), rock, ambient, jazz, synthwave, indie pop, hip hop, country, metal, classical, r&b, edm, folk, reggae, blues.
 - **Moods (14):** happy, chill, intense, relaxed, moody, focused, confident, nostalgic, angry, peaceful, romantic, euphoric, sad, melancholy.
 - **Numeric features:** energy, tempo_bpm, valence, danceability, acousticness (all 0 to 1 except tempo).
+- **Advanced features I added:** popularity (0-100), release_decade (1960s-2020s), mood_tags (2-3 detailed tags per song, like "heartbroken; lonely; bittersweet"), instrumentalness (0-1), and liveness (0-1).
 
 **Limits:** Most genres only have one song, so if you like metal, there is exactly one metal song for you. There's no lyrics, language, release year, popularity, or artist info beyond a name. The numbers were made up to "feel right," not measured from real audio. And a big part of musical taste is missing entirely: context (working out vs studying), nostalgia, and the fact that most people like more than one genre.
 
@@ -69,7 +71,7 @@ Lastly, **conflicting preferences get silently resolved in favor of labels.** Th
 
 ### Profiles tested
 
-I tested 4 "normal" profiles and 3 adversarial ones that I brainstormed with AI to try to break the scoring:
+I tested 4 "normal" profiles, 2 profiles that use the advanced features, and 3 adversarial ones that I brainstormed with AI to try to break the scoring:
 
 | Profile | genre | mood | energy | likes_acoustic | Why |
 |---|---|---|---|---|---|
@@ -80,6 +82,8 @@ I tested 4 "normal" profiles and 3 adversarial ones that I brainstormed with AI 
 | Sad but Hyped | folk | sad | 0.90 | – | conflicting: sad labels, high energy |
 | Ghost Genre | k-pop | happy | 0.70 | – | genre not in catalog |
 | Acoustic Headbanger | metal | angry | 0.95 | True | conflicting: loud but acoustic |
+| 90s Nostalgia Hunter | country | nostalgic | 0.50 | – | uses decade, tags, popularity, liveness |
+| Deep Focus Instrumental | lofi | focused | 0.40 | – | uses instrumental, tags, popularity, decade |
 
 ### What surprised me
 
@@ -99,6 +103,9 @@ I tested 4 "normal" profiles and 3 adversarial ones that I brainstormed with AI 
 - **Sad but Hyped vs Default Pop/Happy:** Both contain Heartbreak Neon but for different reasons: for the sad user it's a mood match, for the happy user it's a genre match. The sad user's list is otherwise mostly "random high-energy songs," which shows that once the one folk song is used up, energy takes over.
 - **Acoustic Headbanger vs Deep Intense Rock:** Almost the same list (Pulse Reactor, Gym Hero, Storm Runner, Sunrise City), even though one says they love acoustic and one says they don't. Acoustic fit only added +0.01 to +0.09 for the headbanger because no loud acoustic songs exist. So the acoustic preference basically doesn't matter for this user.
 
+- **Deep Focus Instrumental vs Chill Lofi:** Both lists are mostly the same three lofi songs, but the order changes. Focus Flow is #3 for Chill Lofi and **#1** for Deep Focus, because it's the only "focused" song and its tags (calm, mellow, steady) match all three of the focus user's tags. The bigger difference is at #5. Chill Lofi gets a jazz song, but Deep Focus gets a *classical* piece, because the advanced features (very instrumental, calm tag, exact popularity match) gave it a way in without any genre or mood match. To me that's the best result in the whole project. It's exactly what I'd want in a study playlist.
+- **90s Nostalgia Hunter vs Sad but Hyped:** Both users only have one song in their genre, so both get one strong #1. The difference is what happens after. Sad but Hyped's #2-5 are basically "random loud songs" sorted by energy. The nostalgia hunter's #2 is a 90s jazz song tagged "warm; nostalgic," which actually fits the vibe. The detailed tags give the system something better than energy to fall back on once genre matches run out.
+
 ### Experiment: weight shift (energy ×2, genre ×0.5)
 
 I added an `energy_focused` mode that doubles energy (1.5 → 3.0) and halves genre (2.0 → 1.0), then reran every profile with `python -m src.main --mode energy_focused`. The math is still valid: max score goes from 5.0 to 5.5, and every component still can't go negative.
@@ -113,7 +120,7 @@ Overall, the experiment made results **more vibe-based and less label-based**, w
 
 ### Tests
 
-`pytest` runs 7 tests: the 2 starter tests for the `Recommender` class, plus tests that `load_songs` converts numbers, `score_song` returns the right score and reasons, energy rewards closeness instead of magnitude, results are sorted, and the diversity penalty pushes a repeat artist down.
+`pytest` runs 8 tests: the 2 starter tests for the `Recommender` class, plus tests that `load_songs` converts numbers, `score_song` returns the right score and reasons, energy rewards closeness instead of magnitude, results are sorted, and the diversity penalty pushes a repeat artist down, and the advanced features only add points when the profile asks for them.
 
 ### Raw output: balanced mode, all profiles
 
@@ -305,6 +312,96 @@ Prefs:   {'genre': 'metal', 'mood': 'angry', 'energy': 0.95, 'likes_acoustic': T
    Score: 1.40
      - energy 0.82 vs target 0.95 (+1.30)
      - acoustic fit (+0.09)
+```
+
+### Raw output: advanced-feature profiles (Challenge 1)
+
+```
+Loaded songs: 20
+
+================================================================
+Profile: 90s Nostalgia Hunter   (mode: balanced)
+Prefs:   {'genre': 'country', 'mood': 'nostalgic', 'energy': 0.5, 'favorite_decade': 1990, 'mood_tags': ['nostalgic', 'warm', 'bittersweet'], 'target_popularity': 45, 'likes_live': True}
+================================================================
+1. Dusty Porch Swing by Willow Creek  [country / nostalgic]
+   Score: 6.42
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy 0.52 vs target 0.50 (+1.47)
+     - popularity 52 vs target 45 (+0.46)
+     - 1990s match (+0.50)
+     - mood tags bittersweet/nostalgic/warm (+0.90)
+     - live feel fit (+0.09)
+2. Coffee Shop Stories by Slow Stereo  [jazz / relaxed]
+   Score: 3.02
+     - energy 0.37 vs target 0.50 (+1.30)
+     - popularity 47 vs target 45 (+0.49)
+     - 1990s match (+0.50)
+     - mood tags nostalgic/warm (+0.60)
+     - live feel fit (+0.12)
+3. Velvet Hours by Amara Lane  [r&b / romantic]
+   Score: 2.40
+     - energy 0.55 vs target 0.50 (+1.42)
+     - popularity 68 vs target 45 (+0.39)
+     - close decade 2000s (+0.25)
+     - mood tags warm (+0.30)
+     - live feel fit (+0.04)
+4. Island Time by Coral Sound  [reggae / relaxed]
+   Score: 2.38
+     - energy 0.50 vs target 0.50 (+1.50)
+     - popularity 60 vs target 45 (+0.42)
+     - mood tags warm (+0.30)
+     - live feel fit (+0.15)
+5. Crossroads Blues by Muddy Lantern  [blues / melancholy]
+   Score: 2.38
+     - energy 0.45 vs target 0.50 (+1.42)
+     - popularity 33 vs target 45 (+0.44)
+     - mood tags bittersweet (+0.30)
+     - live feel fit (+0.21)
+
+Loaded songs: 20
+
+================================================================
+Profile: Deep Focus Instrumental   (mode: balanced)
+Prefs:   {'genre': 'lofi', 'mood': 'focused', 'energy': 0.4, 'wants_instrumental': True, 'mood_tags': ['calm', 'mellow', 'steady'], 'target_popularity': 30, 'favorite_decade': 2020}
+================================================================
+1. Focus Flow by LoRoom  [lofi / focused]
+   Score: 6.71
+     - genre match (+2.0)
+     - mood match (+1.0)
+     - energy 0.40 vs target 0.40 (+1.50)
+     - popularity 55 vs target 30 (+0.38)
+     - 2020s match (+0.50)
+     - mood tags calm/mellow/steady (+0.90)
+     - instrumental fit (+0.44)
+2. Midnight Coding by LoRoom  [lofi / chill]
+   Score: 5.03
+     - genre match (+2.0)
+     - energy 0.42 vs target 0.40 (+1.47)
+     - popularity 64 vs target 30 (+0.33)
+     - 2020s match (+0.50)
+     - mood tags mellow (+0.30)
+     - instrumental fit (+0.42)
+3. Library Rain by Paper Lanterns  [lofi / chill]
+   Score: 4.74
+     - genre match (+2.0)
+     - energy 0.35 vs target 0.40 (+1.42)
+     - popularity 58 vs target 30 (+0.36)
+     - 2020s match (+0.50)
+     - instrumental fit (+0.45)
+4. Spacewalk Thoughts by Orbit Bloom  [ambient / chill]
+   Score: 2.79
+     - energy 0.28 vs target 0.40 (+1.32)
+     - popularity 40 vs target 30 (+0.45)
+     - close decade 2010s (+0.25)
+     - mood tags calm (+0.30)
+     - instrumental fit (+0.47)
+5. Moonlit Sonata No. 2 by Clara Ivers  [classical / peaceful]
+   Score: 2.46
+     - energy 0.18 vs target 0.40 (+1.17)
+     - popularity 30 vs target 30 (+0.50)
+     - mood tags calm (+0.30)
+     - instrumental fit (+0.49)
 ```
 
 ### Raw output: energy_focused experiment, all profiles
@@ -504,7 +601,7 @@ Prefs:   {'genre': 'metal', 'mood': 'angry', 'energy': 0.95, 'likes_acoustic': T
 
 - **Fuzzy genre matching.** Give partial credit for related genres (pop ↔ indie pop, rock ↔ metal) using a small similarity table, so "indie pop" isn't treated as unrelated to "pop."
 - **Let users have multiple favorites.** A list of genres/moods with their own weights would fit real people way better than a single favorite.
-- **Use the features I'm ignoring.** Valence and danceability are already in the CSV. Valence especially could fix the "Sad but Hyped" problem, since it measures how positive a song sounds regardless of its mood label.
+- **Use the features I'm ignoring.** Valence and danceability are already in the CSV and still aren't scored. Valence especially could fix the "Sad but Hyped" problem, since it measures how positive a song sounds regardless of its mood label.
 - **Flag bad fits.** If the top score is below some threshold, tell the user "nothing here really matches" instead of pretending.
 - **More, balanced data.** At least 3–5 songs per genre so niche users aren't stuck with one match.
 

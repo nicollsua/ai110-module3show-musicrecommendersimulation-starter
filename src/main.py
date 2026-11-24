@@ -27,6 +27,13 @@ PROFILES = {
     "Sad but Hyped":      {"genre": "folk", "mood": "sad", "energy": 0.9},
     "Ghost Genre":        {"genre": "k-pop", "mood": "happy", "energy": 0.7},
     "Acoustic Headbanger": {"genre": "metal", "mood": "angry", "energy": 0.95, "likes_acoustic": True},
+    # Advanced-feature profiles (Challenge 1)
+    "90s Nostalgia Hunter": {"genre": "country", "mood": "nostalgic", "energy": 0.5,
+                             "favorite_decade": 1990, "mood_tags": ["nostalgic", "warm", "bittersweet"],
+                             "target_popularity": 45, "likes_live": True},
+    "Deep Focus Instrumental": {"genre": "lofi", "mood": "focused", "energy": 0.4,
+                                "wants_instrumental": True, "mood_tags": ["calm", "mellow", "steady"],
+                                "target_popularity": 30, "favorite_decade": 2020},
 }
 
 

@@ -107,3 +107,14 @@ def test_diversity_penalty_pushes_down_repeat_artists():
     assert diverse_titles.index("Focus Flow") > diverse_titles.index("Spacewalk Thoughts")
     focus = next(expl for s, _, expl in diverse if s["title"] == "Focus Flow")
     assert "artist already listed" in focus
+
+
+def test_advanced_features_only_score_when_requested():
+    songs = load_songs("data/songs.csv")
+    song = next(s for s in songs if s["title"] == "Dusty Porch Swing")
+    assert song["release_decade"] == 1990 and isinstance(song["popularity"], int)
+    base, _ = score_song({"genre": "country", "mood": "nostalgic", "energy": 0.5}, song)
+    full, reasons = score_song({"genre": "country", "mood": "nostalgic", "energy": 0.5,
+                                "favorite_decade": 1990, "mood_tags": ["nostalgic", "warm"]}, song)
+    assert full == round(base + 0.5 + 0.6, 4)  # decade match + 2 tags
+    assert any("1990s match" in r for r in reasons)
